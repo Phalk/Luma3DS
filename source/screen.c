@@ -40,6 +40,7 @@
 #include "memory.h"
 #include "i2c.h"
 #include "utils.h"
+#include "cache.h"
 
 struct fb fbs[2];
 
@@ -61,6 +62,8 @@ void prepareArm11ForFirmlaunch(void)
 
 void deinitScreens(void)
 {
+    flushEntireDCache();
+    flushEntireICache();
     if(ARESCREENSINITIALIZED) invokeArm11Function(DEINIT_SCREENS);
 }
 

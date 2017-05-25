@@ -35,18 +35,33 @@ typedef volatile u16 vu16;
 typedef volatile u32 vu32;
 typedef volatile u64 vu64;
 
-#define SCREEN_TOP_WIDTH     400
-#define SCREEN_BOTTOM_WIDTH  320
-#define SCREEN_HEIGHT        240
-#define SCREEN_TOP_FBSIZE    (3 * SCREEN_TOP_WIDTH * SCREEN_HEIGHT)
-#define SCREEN_BOTTOM_FBSIZE (3 * SCREEN_BOTTOM_WIDTH * SCREEN_HEIGHT)
-#define ARM11_PARAMETERS_ADDRESS  0x1FFFF000
+#define ARM11_PARAMETERS_ADDRESS        0x1FFFF000
 
-struct fb {
-     u8 *top_left;
-     u8 *top_right;
-     u8 *bottom;
-} __attribute__((packed));
+#define GPU_POWER_CTRL                  (*(vu32 *)0x10400030)
+
+#define CFG11_GPU_STATUS                (*(vu16 *)0x10141000)
+#define CFG11_GPU_CNT                   (*(vu32 *)0x10141200)
+#define CFG11_GPU_CNT2                  (*(vu8  *)0x10141204)
+#define CFG11_GPU_CNT3                  (*(vu8  *)0x10141208)
+#define CFG11_GPU_FCRAM_CNT             (*(vu16 *)0x10141210)
+
+#define GPIO_DATA3                      (*(vu16 *)0x10147020)
+#define GPIO_DATA3_INT_MASK             (*(vu16 *)0x10147022)
+
+#define MPCORE_REGS_BASE                0x17E00000
+#define MPCORE_GID_REGS_BASE            (MPCORE_REGS_BASE + 0x1000)
+
+#define MPCORE_CPU_IFACE_CTRL           (*(vu32 *)(MPCORE_REGS_BASE + 0x100))
+#define MPCORE_CPU_IFACE_INT_ACK        (*(vu32 *)(MPCORE_REGS_BASE + 0x10C))
+
+#define MPCORE_GID_CTRL                 (*(vu32 *)(MPCORE_GID_REGS_BASE + 0x000))
+#define MPCORE_GID_INT_ENABLE_SET       ((vu32 *)(MPCORE_GID_REGS_BASE + 0x100))
+#define MPCORE_GID_INT_ENABLE_CLEAR     ((vu32 *)(MPCORE_GID_REGS_BASE + 0x180))
+#define MPCORE_GID_INT_PENDING_SET      ((vu32 *)(MPCORE_GID_REGS_BASE + 0x200))
+#define MPCORE_GID_INT_PENDING_CLEAR    ((vu32 *)(MPCORE_GID_REGS_BASE + 0x280))
+#define MPCORE_GID_INT_PRIORITY         ((vu32 *)(MPCORE_GID_REGS_BASE + 0x400))
+#define MPCORE_GID_INT_TARGETS          ((vu32 *)(MPCORE_GID_REGS_BASE + 0x800))
+#define MPCORE_GID_SGI                  (*(vu32 *)(MPCORE_GID_REGS_BASE + 0xF00))
 
 typedef enum
 {

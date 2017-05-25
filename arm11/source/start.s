@@ -30,7 +30,7 @@ operation:
     .word 0
 
 start:
-    @ Disable interrupts and switch to supervisor mode
+    @ Disable (mask) interrupts and switch to supervisor mode
     cpsid aif, #0x13
 
     @ Set the control register to reset default: everything disabled
@@ -58,6 +58,13 @@ start:
 
     ldr sp, =__stack_top__
     b main
+
+.global b11WaitCycles
+.type   b11WaitCycles, %function
+b11WaitCycles:
+    subs r0, #5
+    bcs b11WaitCycles
+    bx lr
 
 .global prepareForFirmlaunch
 .type   prepareForFirmlaunch, %function
