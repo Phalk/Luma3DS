@@ -27,10 +27,6 @@
 #include "kernel_extension.h"
 #include "kernel_extension_setup.h"
 
-#define MPCORE_REGS_BASE        ((u32)PA_PTR(0x17E00000))
-#define MPCORE_GID_REGS_BASE    (MPCORE_REGS_BASE + 0x1000)
-#define MPCORE_GID_SGI          (*(vu32 *)(MPCORE_GID_REGS_BASE + 0xF00))
-
 struct Parameters
 {
     void (*SGI0HandlerCallback)(struct Parameters *, u32 *);
@@ -61,15 +57,23 @@ struct Parameters
     } __attribute__((packed)) info;
 };
 
+static void K_JumpToKernelExtension(volatile struct Parameters *p)
+{
+    __asm__ volatile("cpsid aif"); // disable interruptss
+    p->coreBarrier();
+    void *cb = ((void * (*)(volatile struct Parameters *))0x40000000)(p);
+    if(cb != NULL)
+        ((Result (*)(Handle, void *, u32))cb)(CUR_PROCESS_HANDLE, NULL, 0);
+    p->coreBarrier();
+}
 
-static void K_SGI0HandlerCallback(volatile struct Parameters *p)
+static void K_MapKernelExtensionL1(volatile struct Parameters *p)
 {
     u32 L1MMUTableAddr;
     vu32 *L1MMUTable;
     u32 coreId;
 
-    __asm__ volatile("cpsid aif"); // disable interrupts
-
+    __asm__ volatile("cpsid aif"); // disable interruptss
     p->coreBarrier();
 
     __asm__ volatile("mrc p15, 0, %0, c0, c0, 5" : "=r"(coreId));
@@ -84,15 +88,17 @@ static void K_SGI0HandlerCallback(volatile struct Parameters *p)
     u32 L2MMUTableAddr = (u32)(p->L2MMUTable) & ~(1 << 31);
     L1MMUTable[0x40000000 >> 20] = L2MMUTableAddr | 1;
 
+    //__asm__ __volatile__("mcr p15, 0, %[val], c8, c7, 0" :: [val] "r" (0) : "memory");
     __asm__ __volatile__("mcr p15, 0, %[val], c7, c10, 4" :: [val] "r" (0) : "memory");
-    ((void (*)(volatile struct Parameters *))0x40000000)(p);
 
     p->coreBarrier();
 }
 
-static u32 ALIGN(0x400) L2MMUTableFor0x40000000[256] = { 0 };
+u32 ALIGN(0x1000) L2MMUTableFor0x40000000[256] = { 0 };
+static volatile struct Parameters *p;
 u32 TTBCR;
-static void K_ConfigureSGI0(void)
+
+static void K_MapKernelExtensionL2(void)
 {
     // see /patches/k11MainHook.s
     u32 *off;
@@ -108,8 +114,8 @@ static void K_ConfigureSGI0(void)
 
     for(off = mcuReboot; off < (u32 *)0xFFFF1000 && *off != 0x726C6468; off++); // "hdlr"
 
-    volatile struct Parameters *p = (struct Parameters *)PA_FROM_VA_PTR(off); // Caches? What are caches?
-    p->SGI0HandlerCallback = (void (*)(struct Parameters *, u32 *))PA_FROM_VA_PTR(K_SGI0HandlerCallback);
+    p = (struct Parameters *)PA_FROM_VA_PTR(off); // Caches? What are caches?
+    p->SGI0HandlerCallback = (void (*)(struct Parameters *, u32 *))PA_FROM_VA_PTR(K_MapKernelExtensionL1);
     p->L2MMUTable = (u32 *)PA_FROM_VA_PTR(L2MMUTableFor0x40000000);
     p->initFPU = (void (*) (void))initFPU;
     p->mcuReboot = (void (*) (void))mcuReboot;
@@ -127,6 +133,11 @@ static void K_ConfigureSGI0(void)
         L2MMUTableFor0x40000000[offset >> 12] = (u32)convertVAToPA(kernel_extension + offset) | 0x516;
 }
 
+static void K_PrepareToJumpToKernelExtension(void)
+{
+    p->SGI0HandlerCallback = (void (*)(struct Parameters *, u32 *))PA_FROM_VA_PTR(K_JumpToKernelExtension);
+}
+
 static void K_SendSGI0ToAllCores(void)
 {
     MPCORE_GID_SGI = 0xF0000; // http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.ddi0360f/CACGDJJC.html
@@ -139,10 +150,19 @@ static inline void flushAllCaches(void)
 
 void installKernelExtension(void)
 {
-    svc0x2F(K_ConfigureSGI0);
+    svc0x2F(K_MapKernelExtensionL2);
     flushAllCaches();
     svc0x2F(K_SendSGI0ToAllCores);
     flushAllCaches();
+    svc0x2F(K_PrepareToJumpToKernelExtension);
+    flushAllCaches();
+    svc0x2F(K_SendSGI0ToAllCores);
+    //flushAllCaches();
 
+    if(n3ds)
+        svcKernelSetState(10, ((L2CEnabled ? 1 : 0) << 1) | (higherClockRate ? 1 : 0));
+
+    //__asm__ volatile("bkpt 1");
+    //svcKernelSetState(7);
     *(volatile bool *)0x1FF81108 = true;
 }

@@ -194,6 +194,7 @@ static void findUsefulSymbols(void)
     OpenProcess = (Result (*)(Handle *, u32))decodeARMBranch((u32 *)officialSVCs[0x33] + 3);
     GetProcessId = (Result (*)(u32 *, Handle))decodeARMBranch((u32 *)officialSVCs[0x35] + 3);
     DebugActiveProcess = (Result (*)(Handle *, u32))decodeARMBranch((u32 *)officialSVCs[0x60] + 3);
+    UnmapProcessMemory = (Result (*)(Handle, void *, u32))officialSVCs[0x72];
     KernelSetState = (Result (*)(u32, u32, u32, u32))((u32 *)officialSVCs[0x7C] + 1);
 
     for(off = (u32 *)svcFallbackHandler; *off != 0xE8BD4010; off++);

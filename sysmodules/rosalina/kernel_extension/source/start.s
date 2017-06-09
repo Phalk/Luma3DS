@@ -30,9 +30,10 @@ _start:
     b ConnectToPortHookWrapper
 
 start:
-    push {r4, lr}
 
+    push {r4, lr}
     mrc p15, 0, r4, c0, c0, 5   @ CPUID register
+
     and r4, #3
     cmp r4, #1
     beq _core1_only
@@ -43,12 +44,15 @@ start:
         ldr r0, [r0]
         cmp r0, #0
         beq _waitLoop
-    b end
+        mov r0, #0
+        b end
 
     _core1_only:
         bl main
         ldr r0, =_setupFinished
         str r4, [r0]
+        ldr r0, =UnmapProcessMemory
+        ldr r0, [r0]
         sev
 
     end:

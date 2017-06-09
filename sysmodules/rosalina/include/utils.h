@@ -37,6 +37,8 @@
 #define PA_FROM_VA_PTR(addr)    PA_PTR(svcConvertVAToPA((const void *)(addr), false))
 #endif
 
+#define REG8(addr)              (*(vu8  *)(PA_PTR(addr)))
+#define REG16(addr)             (*(vu16 *)(PA_PTR(addr)))
 #define REG32(addr)             (*(vu32 *)(PA_PTR(addr)))
 
 static inline u32 makeARMBranch(const void *src, const void *dst, bool link) // the macros for those are ugly and buggy

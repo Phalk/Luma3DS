@@ -81,17 +81,21 @@ typedef s32 Result;                 ///< Function result.
 #define CUR_THREAD_HANDLE       0xFFFF8000
 #define CUR_PROCESS_HANDLE      0xFFFF8001
 
-#define MPCORE_REGS_BASE        (0x17E00000 | (1u << 31))
-#define MPCORE_SCU_CFG          (*(vu32 *)(MPCORE_REGS_BASE + 4))
-#define MPCORE_INT_ACK          (*(vu32 *)(MPCORE_REGS_BASE + 0x10C))
+#define REG8(addr)              (*(vu8  *)(PA_PTR(addr)))
+#define REG16(addr)             (*(vu16 *)(PA_PTR(addr)))
+#define REG32(addr)             (*(vu32 *)(PA_PTR(addr)))
+
+#define MPCORE_REGS_BASE        0x17E00000
+#define MPCORE_SCU_CFG          REG32(MPCORE_REGS_BASE + 4)
+#define MPCORE_INT_ACK          REG32(MPCORE_REGS_BASE + 0x10C)
 
 #define MPCORE_GID_REGS_BASE    (MPCORE_REGS_BASE + 0x1000)
-#define MPCORE_GID_SGI          (*(vu32 *)(MPCORE_GID_REGS_BASE + 0xF00))
+#define MPCORE_GID_SGI          REG32(MPCORE_GID_REGS_BASE + 0xF00)
 
-#define CFG11_REGS_BASE           (0x10140000 | (1u << 31))
-#define CFG11_WIFICNT             (*(vu8  *)(CFG11_REGS_BASE + 0x180))
-#define CFG11_MPCORE_CFG          (*(vu16 *)(CFG11_REGS_BASE + 0xFFC))
-#define CFG11_MPCORE_CLKCNT       (*(vu16 *)(CFG11_REGS_BASE + 0x1300))
+#define CFG11_REGS_BASE           0x10140000
+#define CFG11_WIFICNT             REG8 (CFG11_REGS_BASE + 0x180)
+#define CFG11_MPCORE_CFG          REG16(CFG11_REGS_BASE + 0xFFC)
+#define CFG11_MPCORE_CLKCNT       REG16(CFG11_REGS_BASE + 0x1300)
 
-#define L2C_REGS_BASE           (0x17E10000 | (1u << 31))
-#define L2C_CTRL                (*(vu32 *)(L2C_REGS_BASE + 0x100))
+#define L2C_REGS_BASE           0x17E10000
+#define L2C_CTRL                REG32(L2C_REGS_BASE + 0x100)
