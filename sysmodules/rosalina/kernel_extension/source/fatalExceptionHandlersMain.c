@@ -35,8 +35,10 @@
 
 bool isExceptionFatal(u32 spsr, u32 *regs, u32 index)
 {
-    if (CONFIG(DISABLEVECTORS)) return false;
-    
+    if(CONFIG(DISABLEVECTORS)) return false;
+
+    if(!(*kextVectorsStatus & 1)) return true;
+
     if((spsr & 0x1f) != 0x10) return true;
 
     KThread *thread = currentCoreContext->objectContext.currentThread;
@@ -66,7 +68,7 @@ extern u32 safecpy_sz;
 bool isDataAbortExceptionRangeControlled(u32 spsr, u32 addr)
 {
     return ((spsr & 0x1F) != 0x10) && (
-                ((u32)kernelUsrCopyFuncsStart <= addr && addr < (u32)kernelUsrCopyFuncsEnd) ||
+                ((*kextVectorsStatus & (1 << 2)) && ((u32)kernelUsrCopyFuncsStart <= addr && addr < (u32)kernelUsrCopyFuncsEnd)) ||
                 ((u32)safecpy <= addr && addr < (u32)safecpy + safecpy_sz)
             );
 }

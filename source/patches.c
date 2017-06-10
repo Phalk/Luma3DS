@@ -55,6 +55,13 @@ u8 *getProcess9Info(u8 *pos, u32 size, u32 *process9Size, u32 *process9MemAddr)
     return (u8 *)off + (off->ncch.exeFsOffset + 1) * 0x200;
 }
 
+static inline u32 getKernel11HandlerVA(u8 *pos, u32 *arm11ExceptionsPage, u32 baseK11VA, u32 id)
+{
+    u32 off = ((-((arm11ExceptionsPage[id] & 0xFFFFFF) << 2)) & (0xFFFFFF << 2)) - 8;
+    u32 pointedInstructionVA = 0xFFFF0000 + 4 * id - off;
+    return *(u32 *)(pos + pointedInstructionVA - baseK11VA + 8);
+}
+
 u32 *getKernel11Info(u8 *pos, u32 size, u32 *baseK11VA, u8 **freeK11Space, u32 **arm11SvcHandler, u32 **arm11ExceptionsPage)
 {
     static const u8 pattern[] = {0x00, 0xB0, 0x9C, 0xE5};
@@ -90,13 +97,13 @@ void installMMUHook(u8 *pos, u32 size, u8 **freeK11Space)
     (*freeK11Space) += mmuHook_bin_size;
 }
 
-void installK11MainHook(u8 *pos, u32 size, bool isSafeMode, u32 baseK11VA, u32 *arm11SvcTable, u32 *arm11ExceptionsPage, u8 **freeK11Space)
+void installK11ExtHooks(u8 *pos, u32 size, bool isSafeMode, u32 baseK11VA, u32 *arm11SvcTable, u32 *arm11ExceptionsPage, u8 **freeK11Space)
 {
     //The parameters to be passed on to the kernel ext
     //Please keep that in sync with the definition in kernel_extension_setup.c and kernel_extension/main.c
     struct KExtParameters
     {
-        void (*SGI0HandlerCallback)(struct KExtParameters *, u32 *);
+        void (*SGI0HandlerCallback)(volatile struct KExtParameters *);
         void *interruptManager;
         u32 *L2MMUTable; //bit31 mapping
 
@@ -106,8 +113,7 @@ void installK11MainHook(u8 *pos, u32 size, bool isSafeMode, u32 baseK11VA, u32 *
 
         u32 TTBCR;
         u32 L1MMUTableAddrs[4];
-
-        u32 kernelVersion;
+        void **originalHandlers;
 
         struct CfwInfo
         {
@@ -131,7 +137,7 @@ void installK11MainHook(u8 *pos, u32 size, bool isSafeMode, u32 baseK11VA, u32 *
     while(*off != 0xF1080080) off--;
     off -= 2;
 
-    memcpy(*freeK11Space, k11MainHook_bin, k11MainHook_bin_size);
+    memcpy(*freeK11Space, k11ExtHooks_bin, k11ExtHooks_bin_size);
 
     u32 relocBase = 0xFFFF0000 + (*freeK11Space - (u8 *)arm11ExceptionsPage);
     *off = MAKE_BRANCH_LINK(baseK11VA + ((u8 *)off - pos), relocBase);
@@ -147,7 +153,19 @@ void installK11MainHook(u8 *pos, u32 size, bool isSafeMode, u32 baseK11VA, u32 *
     u32 InterruptManager_MapInterrupt = baseK11VA + ((u8 *)off - pos) + offset;
     u32 interruptManager = *(u32 *)(off - 4 + (*(off - 6) & 0xFFF) / 4);
 
-    off = (u32 *)memsearch(*freeK11Space, "bind", k11MainHook_bin_size, 4);
+    //Fetch the handlers addresses _before_ overwriting the veneers
+    u32 origHandlers;
+    off = (u32 *)memsearch(*freeK11Space, "exch", k11ExtHooks_bin_size, 4);
+    origHandlers = relocBase + ((u8 *)off - (*freeK11Space));
+
+    for(u32 i = 1; i <= 4; i++)
+        off[i] = getKernel11HandlerVA(pos, arm11ExceptionsPage, baseK11VA, i);
+
+    off = (u32 *)memsearch(*freeK11Space, "vner", k11ExtHooks_bin_size, 4);
+    for(u32 i = 1; i <= 4; i++)
+        arm11ExceptionsPage[i] = MAKE_BRANCH(0xFFFF0000 + 4 * i, relocBase + off[i]);
+
+    off = (u32 *)memsearch(*freeK11Space, "bind", k11ExtHooks_bin_size, 4);
 
     off[0] = InterruptManager_MapInterrupt;
 
@@ -160,6 +178,7 @@ void installK11MainHook(u8 *pos, u32 size, bool isSafeMode, u32 baseK11VA, u32 *
     memcpy((void *)&p->SGI0HandlerCallback, "hdlr", 4);
 
     p->interruptManager = (void *)interruptManager;
+    p->originalHandlers = (void **)origHandlers;
 
     struct CfwInfo *info = &p->info;
     memcpy(&info->magic, "LUMA", 4);
@@ -174,23 +193,28 @@ void installK11MainHook(u8 *pos, u32 size, bool isSafeMode, u32 baseK11VA, u32 *
     if(isSafeMode) info->flags |= 1 << 5;
     if(isSdMode) info->flags |= 1 << 6;
 
-    (*freeK11Space) += (k11MainHook_bin_size + sizeof(struct KExtParameters));
+    (*freeK11Space) += (k11ExtHooks_bin_size + sizeof(struct KExtParameters));
     (*freeK11Space) += 4 - ((u32)(*freeK11Space) % 4);
 }
 
-void installSvcConnectToPortInitHook(u32 *arm11SvcTable, u32 *arm11ExceptionsPage, u8 **freeK11Space)
+void installSvcInitHooks(u32 *arm11SvcTable, u32 *arm11ExceptionsPage, u8 **freeK11Space)
 {
     u32 addr = 0xFFFF0000 + (u32)*freeK11Space - (u32)arm11ExceptionsPage;
-    u32 svcSleepThreadAddr = arm11SvcTable[0x0A], svcConnectToPortAddr = arm11SvcTable[0x2D];
+    u32 svcControlMemoryAddr = arm11SvcTable[1],
+        svcSleepThreadAddr = arm11SvcTable[0x0A],
+        svcConnectToPortAddr = arm11SvcTable[0x2D],
+        svcKernelSetStateAddr = arm11SvcTable[0x7C];
 
-    arm11SvcTable[0x2D] = addr;
-    memcpy(*freeK11Space, svcConnectToPortInitHook_bin, svcConnectToPortInitHook_bin_size);
+    arm11SvcTable[1] = arm11SvcTable[0x2D] = arm11SvcTable[0x7C] = addr;
+    memcpy(*freeK11Space, svcInitHooks_bin, svcInitHooks_bin_size);
 
     u32 *off = (u32 *)(*freeK11Space);
-    off[1] = svcConnectToPortAddr;
+    off[1] = svcControlMemoryAddr;
     off[2] = svcSleepThreadAddr;
+    off[3] = svcConnectToPortAddr;
+    off[4] = svcKernelSetStateAddr;
 
-    (*freeK11Space) += svcConnectToPortInitHook_bin_size;
+    (*freeK11Space) += svcInitHooks_bin_size;
 }
 
 

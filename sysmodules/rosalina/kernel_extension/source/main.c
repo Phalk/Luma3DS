@@ -33,10 +33,8 @@
 #include "svcHandler.h"
 #include "memory.h"
 
-static const u32 *const exceptionsPage = (const u32 *)0xFFFF0000;
+//static const u32 *const exceptionsPage = (const u32 *)0xFFFF0000;
 void *originalHandlers[8] = {NULL};
-
-enum VECTORS { RESET = 0, UNDEFINED_INSTRUCTION, SVC, PREFETCH_ABORT, DATA_ABORT, RESERVED, IRQ, FIQ };
 
 static void setupSGI0Handler(void)
 {
@@ -44,51 +42,29 @@ static void setupSGI0Handler(void)
         interruptManager->N3DS.privateInterrupts[i][0].interruptEvent = customInterruptEvent;
 }
 
-static inline void **getHandlerDestination(enum VECTORS vector)
-{
-    u32 *branch_dst = (u32 *)decodeARMBranch((u32 *)exceptionsPage + (u32)vector);
-    return (void **)(branch_dst + 2);
-}
-
-static inline void swapHandlerInVeneer(enum VECTORS vector, void *handler)
-{
-    void **dst = getHandlerDestination(vector);
-    originalHandlers[(u32)vector] = *dst;
-    if(handler != NULL)
-        *(void**)PA_FROM_VA_PTR(dst) = handler;
-}
-
 static bool **enableUserExceptionHandlersForCPUExcLoc;
 static bool enableUserExceptionHandlersForCPUExc = true;
 
 static void setupSvcHandler(void)
 {
-    swapHandlerInVeneer(SVC, svcHandler);
+    void **arm11SvcTable = (void**)originalHandlers[2];
 
-    void **arm11SvcTable = (void**)originalHandlers[(u32)SVC];
     while(*arm11SvcTable != NULL) arm11SvcTable++; //Look for SVC0 (NULL)
     memcpy(officialSVCs, arm11SvcTable, 4 * 0x7E);
 
-    officialSVCs[0x2D] = *((void **)officialSVCs[0x2D] + 1);
+    void **origSVCs = (void **)officialSVCs[0x2D] + 1;
+    officialSVCs[1] = origSVCs[0];
+    officialSVCs[0x2D] = origSVCs[2];
+    officialSVCs[0x7C] = origSVCs[3];
 
     CustomBackdoor = (Result (*)(void *, ...))((u32 *)officialSVCs[0x2F] + 2);
     officialSVCs[0x2F] = *((void **)officialSVCs[0x2F] + 1);
 
-    u32 *off = (u32 *)originalHandlers[(u32) SVC];
+    u32 *off = (u32 *)originalHandlers[2];
     while(*off++ != 0xE1A00009);
     svcFallbackHandler = (void (*)(u8))decodeARMBranch(off);
     for(; *off != 0xE92D000F; off++);
     PostprocessSvc = (void (*)(void))decodeARMBranch(off + 1);
-}
-
-static void setupExceptionHandlers(void)
-{
-    swapHandlerInVeneer(FIQ, FIQHandler);
-    swapHandlerInVeneer(UNDEFINED_INSTRUCTION, undefinedInstructionHandler);
-    swapHandlerInVeneer(PREFETCH_ABORT, prefetchAbortHandler);
-    swapHandlerInVeneer(DATA_ABORT, dataAbortHandler);
-
-    setupSvcHandler();
 }
 
 static void findUsefulSymbols(void)
@@ -145,7 +121,7 @@ static void findUsefulSymbols(void)
     for(; *off != 0xE320F000; off++);
     KObjectMutex__ErrorOccured = (void (*)(void))decodeARMBranch(off + 1);
 
-    for(off = (u32 *)originalHandlers[(u32) DATA_ABORT]; *off != (u32)exceptionStackTop; off++);
+    for(off = (u32 *)originalHandlers[4]; *off != (u32)exceptionStackTop; off++);
     kernelUsrCopyFuncsStart = (void *)off[1];
     kernelUsrCopyFuncsEnd = (void *)off[2];
 
@@ -210,7 +186,7 @@ static void findUsefulSymbols(void)
     ///////////////////////////////////////////
 
     // Shitty/lazy heuristic but it works on even 4.5, so...
-    u32 textStart = ((u32)originalHandlers[(u32) SVC]) & ~0xFFFF;
+    u32 textStart = ((u32)originalHandlers[2]) & ~0xFFFF;
     u32 rodataStart = (u32)(interruptManager->N3DS.privateInterrupts[0][6].interruptEvent->vtable) & ~0xFFF;
 
     u32 textSize = rodataStart - textStart;
@@ -231,7 +207,7 @@ static void findUsefulSymbols(void)
 
 struct Parameters
 {
-    void (*SGI0HandlerCallback)(struct Parameters *, u32 *);
+    void (*SGI0HandlerCallback)(volatile struct Parameters *);
     InterruptManager *interruptManager;
     u32 *L2MMUTable; // bit31 mapping
 
@@ -242,8 +218,7 @@ struct Parameters
     u32 TTBCR;
     u32 L1MMUTableAddrs[4];
 
-    u32 kernelVersion;
-
+    void **originalHandlers;
     CfwInfo cfwInfo;
 };
 
@@ -291,11 +266,17 @@ void main(volatile struct Parameters *p)
     TTBCR = p->TTBCR;
     memcpy(L1MMUTableAddrs, (const void *)p->L1MMUTableAddrs, 16);
     exceptionStackTop = (u32 *)0xFFFF2000 + (1 << (32 - TTBCR - 20));
-    kernelVersion = p->kernelVersion;
     cfwInfo = p->cfwInfo;
 
+    kernelVersion = *(vu32 *)0x1FF80000;
+    kextVectorsStatus = (vu8 *)PA_PTR((void *)0x1FFFFFF0);
+
+    memcpy(originalHandlers + 1, p->originalHandlers + 1, 16);
     setupSGI0Handler();
-    setupExceptionHandlers();
+
+    *kextVectorsStatus |= 0x1A << 2; // we're ready to use fatal exception handlers
+
+    setupSvcHandler();
     findUsefulSymbols();
     enableDebugFeatures();
     doOtherPatches();

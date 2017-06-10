@@ -27,9 +27,15 @@
 #include "kernel_extension.h"
 #include "kernel_extension_setup.h"
 
+#define MPCORE_REGS_BASE        0x17E00000
+#define MPCORE_GID_REGS_BASE    (MPCORE_REGS_BASE + 0x1000)
+#define MPCORE_GID_SGI          REG32(MPCORE_GID_REGS_BASE + 0xF00)
+
+static vu8 *const kextVectorsStatus = (vu8 *)PA_PTR((void *)0x1FFFFFF0);
+
 struct Parameters
 {
-    void (*SGI0HandlerCallback)(struct Parameters *, u32 *);
+    void (*SGI0HandlerCallback)(volatile struct Parameters *);
     void *interruptManager;
     u32 *L2MMUTable; // bit31 mapping
 
@@ -40,8 +46,7 @@ struct Parameters
     u32 TTBCR;
     u32 L1MMUTableAddrs[4];
 
-    u32 kernelVersion;
-
+    void **originalHandlers;
     struct CfwInfo
     {
         char magic[4];
@@ -56,16 +61,16 @@ struct Parameters
         u32 config;
     } __attribute__((packed)) info;
 };
-
+/*
 static void K_JumpToKernelExtension(volatile struct Parameters *p)
 {
     __asm__ volatile("cpsid aif"); // disable interruptss
     p->coreBarrier();
-    void *cb = ((void * (*)(volatile struct Parameters *))0x40000000)(p);
-    if(cb != NULL)
-        ((Result (*)(Handle, void *, u32))cb)(CUR_PROCESS_HANDLE, NULL, 0);
+    __asm__ __volatile__("mcr p15, 0, %[val], c8, c7, 0" :: [val] "r" (0) : "memory"); // not necessary since that addr has never been mapped before
+    __asm__ __volatile__("mcr p15, 0, %[val], c7, c10, 4" :: [val] "r" (0) : "memory");
+    __asm__ __volatile__("mcr p15, 0, %[val], c7, c10, 4" :: [val] "r" (0) : "memory");
     p->coreBarrier();
-}
+}*/
 
 static void K_MapKernelExtensionL1(volatile struct Parameters *p)
 {
@@ -87,22 +92,21 @@ static void K_MapKernelExtensionL1(volatile struct Parameters *p)
     // Actually map the kernel ext
     u32 L2MMUTableAddr = (u32)(p->L2MMUTable) & ~(1 << 31);
     L1MMUTable[0x40000000 >> 20] = L2MMUTableAddr | 1;
-
-    //__asm__ __volatile__("mcr p15, 0, %[val], c8, c7, 0" :: [val] "r" (0) : "memory");
+    __asm__ __volatile__("mcr p15, 0, %[val], c8, c7, 0" :: [val] "r" (0) : "memory"); // not necessary since that addr has never been mapped before
     __asm__ __volatile__("mcr p15, 0, %[val], c7, c10, 4" :: [val] "r" (0) : "memory");
+    ((void * (*)(volatile struct Parameters *))0x40000000)(p);
 
     p->coreBarrier();
 }
 
 u32 ALIGN(0x1000) L2MMUTableFor0x40000000[256] = { 0 };
 static volatile struct Parameters *p;
-u32 TTBCR;
 
 static void K_MapKernelExtensionL2(void)
 {
-    // see /patches/k11MainHook.s
     u32 *off;
     u32 *initFPU, *mcuReboot, *coreBarrier;
+    u32 TTBCR;
 
     // Search for stuff in the 0xFFFF0000 page
     for(initFPU = (u32 *)0xFFFF0000; initFPU < (u32 *)0xFFFF1000 && *initFPU != 0xE1A0D002; initFPU++);
@@ -115,27 +119,21 @@ static void K_MapKernelExtensionL2(void)
     for(off = mcuReboot; off < (u32 *)0xFFFF1000 && *off != 0x726C6468; off++); // "hdlr"
 
     p = (struct Parameters *)PA_FROM_VA_PTR(off); // Caches? What are caches?
-    p->SGI0HandlerCallback = (void (*)(struct Parameters *, u32 *))PA_FROM_VA_PTR(K_MapKernelExtensionL1);
+    p->SGI0HandlerCallback = (void (*)(volatile struct Parameters *))PA_FROM_VA_PTR(K_MapKernelExtensionL1);
     p->L2MMUTable = (u32 *)PA_FROM_VA_PTR(L2MMUTableFor0x40000000);
     p->initFPU = (void (*) (void))initFPU;
     p->mcuReboot = (void (*) (void))mcuReboot;
     p->coreBarrier = (void (*) (void))coreBarrier;
-
     __asm__ volatile("mrc p15, 0, %0, c2, c0, 2" : "=r"(TTBCR));
     p->TTBCR = TTBCR;
-
-    p->kernelVersion = *(vu32 *)0x1FF80000;
 
     // Now let's configure the L2 table
 
     //4KB extended small pages: [SYS:RW USR:-- X  TYP:NORMAL SHARED OUTER NOCACHE, INNER CACHED WB WA]
     for(u32 offset = 0; offset < kernel_extension_size; offset += 0x1000)
         L2MMUTableFor0x40000000[offset >> 12] = (u32)convertVAToPA(kernel_extension + offset) | 0x516;
-}
 
-static void K_PrepareToJumpToKernelExtension(void)
-{
-    p->SGI0HandlerCallback = (void (*)(struct Parameters *, u32 *))PA_FROM_VA_PTR(K_JumpToKernelExtension);
+    __asm__ __volatile__("mcr p15, 0, %[val], c7, c10, 4" :: [val] "r" (0) : "memory");
 }
 
 static void K_SendSGI0ToAllCores(void)
@@ -154,15 +152,10 @@ void installKernelExtension(void)
     flushAllCaches();
     svc0x2F(K_SendSGI0ToAllCores);
     flushAllCaches();
-    svc0x2F(K_PrepareToJumpToKernelExtension);
+    /*svc0x2F(K_PrepareToJumpToKernelExtension);
     flushAllCaches();
     svc0x2F(K_SendSGI0ToAllCores);
-    //flushAllCaches();
+    flushAllCaches();*/
 
-    if(n3ds)
-        svcKernelSetState(10, ((L2CEnabled ? 1 : 0) << 1) | (higherClockRate ? 1 : 0));
-
-    //__asm__ volatile("bkpt 1");
-    //svcKernelSetState(7);
-    *(volatile bool *)0x1FF81108 = true;
+    *kextVectorsStatus |= 5 << 2; // SVC handler ready | kext ready
 }

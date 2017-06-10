@@ -1,6 +1,6 @@
 .arm.little
 
-.create "build/k11MainHook.bin", 0
+.create "build/k11ExtHooks.bin", 0
 .arm
 
 bindSGI0:
@@ -53,7 +53,57 @@ convertVAToPA:
     movne r0, #0
     bx lr
 
+undefinedInstructionVeneer:
+    .word 0xf57ff01f            ; clrex
+    mov sp, #0xa0000000
+    ldrb sp, [sp, #-0x10]       ; normally 3 on init
+    tst sp, #(1 << (1 + 2))
+    ldreq pc, [undefinedInstructionHandler]
+    ldrne pc, [undefinedInstructionHandlerAlt]
+
+svcVeneer:
+    .word 0xf57ff01f            ; clrex
+    push {r0}
+    mov r0, #0xa0000000
+    ldrb r0, [r0, #-0x10]
+    tst r0, #(1 << (2 + 2))
+    pop {r0}
+    ldreq pc, [svcHandler]
+    ldrne pc, [svcHandlerAlt]
+
+prefetchAbortVeneer:
+    .word 0xf57ff01f            ; clrex
+    mov sp, #0xa0000000
+    ldrb sp, [sp, #-0x10]
+    tst sp, #(1 << (3 + 2))
+    ldreq pc, [prefetchAbortHandler]
+    ldrne pc, [prefetchAbortHandlerAlt]
+
+dataAbortVeneer:
+    .word 0xf57ff01f            ; clrex
+    mov sp, #0xa0000000
+    ldrb sp, [sp, #-0x10]
+    tst sp, #(1 << (4 + 2))
+    ldreq pc, [dataAbortHandler]
+    ldrne pc, [dataAbortHandlerAlt]
 .pool
+
+.ascii "vner"
+.word undefinedInstructionVeneer
+.word svcVeneer
+.word prefetchAbortVeneer
+.word dataAbortVeneer
+
+.ascii "exch"
+undefinedInstructionHandler: .word 0
+svcHandler: .word 0
+prefetchAbortHandler: .word 0
+dataAbortHandler: .word 0
+
+undefinedInstructionHandlerAlt: .word 0x40000004
+svcHandlerAlt: .word 0x40000008
+prefetchAbortHandlerAlt: .word 0x4000000C
+dataAbortHandlerAlt: .word 0x40000010
 
 ; Result InterruptManager::MapInterrupt(InterruptManager *this, InterruptEvent *iEvent, u32 interruptID, u32 coreID, s32 priority, bool willBeMasked, bool isLevelHighActive);
 InterruptManager_MapInterrupt: .ascii "bind"

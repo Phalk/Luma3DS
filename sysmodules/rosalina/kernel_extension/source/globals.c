@@ -87,6 +87,7 @@ u32 *exceptionStackTop;
 u32 TTBCR;
 u32 L1MMUTableAddrs[4];
 
+vu8 *kextVectorsStatus;
 u32 kernelVersion;
 void *kernelUsrCopyFuncsStart, *kernelUsrCopyFuncsEnd;
 

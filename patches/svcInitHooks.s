@@ -1,18 +1,21 @@
 .arm.little
 
-.create "build/svcConnectToPortInitHook.bin", 0
+.create "build/svcInitHooks.bin", 0
 .arm
     b skip_vars
 vars:
-    orig: .word 0
+    ; SVCs that are susceptible to be used by section0 modules very early on
+    ControlMemory: .word 0
     SleepThread: .word 0
+    ConnectToPort: .word 0
+    KernelSetState: .word 0
 skip_vars:
     push {r0-r4, lr}
-    ldr r4, =0x1ff81108
+    mov r4, #0xa0000000
 
     loop:
-        ldrb r12, [r4]
-        cmp r12, #0
+        ldrb r12, [r4, #-0x10]
+        tst r12, #(1 << (2 + 2))
         bne loop_end
 
         ldr r12, [SleepThread]
@@ -24,7 +27,7 @@ skip_vars:
     loop_end:
     pop {r0-r4, lr}
     mov r12, #0x40000000
-    add r12, #4
+    add r12, #0x14
     bx r12
 
 .pool

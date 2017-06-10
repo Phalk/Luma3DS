@@ -174,10 +174,6 @@ _commonHandler:
     ldr r12, [r12]
     bx r12
 
-.global FIQHandler
-.type   FIQHandler, %function
-GEN_USUAL_HANDLER FIQ, 0, 28
-
 .global undefinedInstructionHandler
 .type   undefinedInstructionHandler, %function
 undefinedInstructionHandler:

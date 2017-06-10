@@ -27,7 +27,12 @@
 .global _start
 _start:
     b start
-    b ConnectToPortHookWrapper
+    b undefinedInstructionHandler
+    b svcHandler
+    b prefetchAbortHandler
+    b dataAbortHandler
+
+    b _resumeYieldedSvc
 
 start:
 
@@ -44,19 +49,26 @@ start:
         ldr r0, [r0]
         cmp r0, #0
         beq _waitLoop
-        mov r0, #0
         b end
 
     _core1_only:
         bl main
         ldr r0, =_setupFinished
         str r4, [r0]
-        ldr r0, =UnmapProcessMemory
-        ldr r0, [r0]
         sev
 
     end:
     pop {r4, pc}
+
+_resumeYieldedSvc:
+    push {r0-r11, lr}
+    bic r0, sp, #0xff
+    bic r0, #0xf00
+    add r0, #0x1000
+    bl svcHook
+    mov r12, r0
+    pop {r0-r11, lr}
+    bx r12
 
 .bss
 .balign 4

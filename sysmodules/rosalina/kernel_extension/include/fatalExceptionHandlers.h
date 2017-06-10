@@ -31,7 +31,6 @@
 bool isExceptionFatal(u32 spsr, u32 *regs, u32 index);
 bool isDataAbortExceptionRangeControlled(u32 spsr, u32 addr);
 
-void FIQHandler(void);
 void undefinedInstructionHandler(void);
 void prefetchAbortHandler(void);
 void dataAbortHandler(void);
