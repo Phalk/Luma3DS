@@ -76,7 +76,7 @@ void initSystem()
 {
     __libc_init_array();
     
-    HBLDR_3DSX_TID = HBLDR_DEFAULT_3DSX_TID;
+    HBLDR_3DSX_TID = 0x0004001000021900ULL;
     installKernelExtension();
 
     __sync_init();
