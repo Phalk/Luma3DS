@@ -340,10 +340,8 @@ u32 patchNativeFirm(u32 firmVersion, FirmwareSource nandType, bool loadFromStora
     u32 kernel9Size = (u32)(process9Offset - arm9Section) - sizeof(Cxi) - 0x200,
         ret = 0;
 
-    installMMUHook(arm11Section1, firm->section[1].size, &freeK11Space);
-    installK11MainHook(arm11Section1, firm->section[1].size, isSafeMode, baseK11VA, arm11SvcTable, arm11ExceptionsPage, &freeK11Space);
-    installSvcConnectToPortInitHook(arm11SvcTable, arm11ExceptionsPage, &freeK11Space);
-    installSvcCustomBackdoor(arm11SvcTable, &freeK11Space, arm11ExceptionsPage);
+    ret += installK11Extension(arm11Section1, firm->section[1].size, isSafeMode, baseK11VA, arm11ExceptionsPage, &freeK11Space);
+    ret += patchKernel11(arm11Section1, firm->section[1].size, baseK11VA, arm11SvcTable, arm11ExceptionsPage);
 
     //Apply signature patches
     ret += patchSignatureChecks(process9Offset, process9Size);
