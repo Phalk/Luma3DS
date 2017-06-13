@@ -36,10 +36,13 @@
 
 Menu miscellaneousMenu = {
     "Miscellaneous options menu",
-    .nbItems = 5,
+    .nbItems = 6,
     {
-        { "Switch the hb. title to the current app.", METHOD, .method = &MiscellaneousMenu_SwitchBoot3dsxTargetTitle },
-        { "Change the menu combo", METHOD, .method = MiscellaneousMenu_ChangeMenuCombo },
+		{ "Switch boot.3dsx launcher to the current app.", METHOD, .method = &MiscellaneousMenu_SwitchBoot3dsxTargetTitle },
+		{ "Switch boot.3dsx launcher to H&S.", METHOD, .method = &MiscellaneousMenu_SwitchBoot3dsxTargetHS },
+		{ "Switch boot.3dsx launcher to eShop.", METHOD, .method = &MiscellaneousMenu_SwitchBoot3dsxTargetEShop },
+		{ "Switch boot.3dsx launcher to Download Play.", METHOD, .method = &MiscellaneousMenu_SwitchBoot3dsxTargetDWP },
+		{ "Change the menu combo", METHOD, .method = MiscellaneousMenu_ChangeMenuCombo },
         { "Start InputRedirection", METHOD, .method = &MiscellaneousMenu_InputRedirection },
         { "Power off", METHOD, .method = &MiscellaneousMenu_PowerOff },
         { "Reboot", METHOD, .method = &MiscellaneousMenu_Reboot },
@@ -110,6 +113,90 @@ void MiscellaneousMenu_SwitchBoot3dsxTargetTitle(void)
         Draw_Unlock();
     }
     while(!(waitInput() & BUTTON_B) && !terminationRequest);
+}
+
+void MiscellaneousMenu_SwitchBoot3dsxTargetHS(void)
+{
+	Result res;
+    char failureReason[64];
+	
+    HBLDR_3DSX_TID = 0x0004001020021300ULL;
+
+	Draw_Lock();
+    Draw_ClearFramebuffer();
+    Draw_FlushFramebuffer();
+    Draw_Unlock();
+    do
+    {
+        Draw_Lock();
+        Draw_DrawString(10, 10, COLOR_TITLE, "Miscellaneous options menu");
+
+        if(R_SUCCEEDED(res))
+            Draw_DrawString(10, 30, COLOR_WHITE, "Operation succeeded.");
+        else
+            Draw_DrawFormattedString(10, 30, COLOR_WHITE, "Operation failed (%s).", failureReason);
+
+        Draw_FlushFramebuffer();
+        Draw_Unlock();
+    }
+	while(!(waitInput() & BUTTON_B) && !terminationRequest);
+
+}
+
+void MiscellaneousMenu_SwitchBoot3dsxTargetEShop(void)
+{
+	Result res;
+    char failureReason[64];
+
+    HBLDR_3DSX_TID = 0x0004001000021900ULL;
+
+	Draw_Lock();
+    Draw_ClearFramebuffer();
+    Draw_FlushFramebuffer();
+    Draw_Unlock();
+    do
+    {
+        Draw_Lock();
+        Draw_DrawString(10, 10, COLOR_TITLE, "Miscellaneous options menu");
+
+        if(R_SUCCEEDED(res))
+            Draw_DrawString(10, 30, COLOR_WHITE, "Operation succeeded.");
+        else
+            Draw_DrawFormattedString(10, 30, COLOR_WHITE, "Operation failed (%s).", failureReason);
+
+        Draw_FlushFramebuffer();
+        Draw_Unlock();
+    }
+	while(!(waitInput() & BUTTON_B) && !terminationRequest);
+
+}
+
+void MiscellaneousMenu_SwitchBoot3dsxTargetDWP(void)
+{
+	Result res;
+    char failureReason[64];
+
+	HBLDR_3DSX_TID = 0x0004001000021100ULL;
+
+	Draw_Lock();
+    Draw_ClearFramebuffer();
+    Draw_FlushFramebuffer();
+    Draw_Unlock();
+    do
+    {
+        Draw_Lock();
+        Draw_DrawString(10, 10, COLOR_TITLE, "Miscellaneous options menu");
+
+        if(R_SUCCEEDED(res))
+            Draw_DrawString(10, 30, COLOR_WHITE, "Operation succeeded.");
+        else
+            Draw_DrawFormattedString(10, 30, COLOR_WHITE, "Operation failed (%s).", failureReason);
+
+        Draw_FlushFramebuffer();
+        Draw_Unlock();
+    }
+	while(!(waitInput() & BUTTON_B) && !terminationRequest);
+
 }
 
 static void MiscellaneousMenu_ConvertComboToString(char *out, u32 combo)

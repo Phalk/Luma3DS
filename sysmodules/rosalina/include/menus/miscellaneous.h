@@ -32,6 +32,9 @@
 extern Menu miscellaneousMenu;
 
 void MiscellaneousMenu_SwitchBoot3dsxTargetTitle(void);
+void MiscellaneousMenu_SwitchBoot3dsxTargetHS(void);
+void MiscellaneousMenu_SwitchBoot3dsxTargetEShop(void);
+void MiscellaneousMenu_SwitchBoot3dsxTargetDWP(void);
 void MiscellaneousMenu_ChangeMenuCombo(void);
 void MiscellaneousMenu_InputRedirection(void);
 void MiscellaneousMenu_PowerOff(void);
