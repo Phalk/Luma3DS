@@ -36,7 +36,7 @@
 
 Menu miscellaneousMenu = {
     "Miscellaneous options menu",
-    .nbItems = 6,
+    .nbItems = 8,
     {
 		{ "Switch boot.3dsx launcher to the current app.", METHOD, .method = &MiscellaneousMenu_SwitchBoot3dsxTargetTitle },
 		{ "Switch boot.3dsx launcher to H&S.", METHOD, .method = &MiscellaneousMenu_SwitchBoot3dsxTargetHS },
@@ -120,7 +120,7 @@ void MiscellaneousMenu_SwitchBoot3dsxTargetHS(void)
 	Result res;
     char failureReason[64];
 	
-    HBLDR_3DSX_TID = 0x0004001020021300ULL;
+    HBLDR_3DSX_TID = 0x0004001000021300ULL;
 
 	Draw_Lock();
     Draw_ClearFramebuffer();
